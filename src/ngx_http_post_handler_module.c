@@ -269,16 +269,21 @@ ngx_http_post_handler_handler(ngx_http_request_t *r)
     }
 
     //fprintf(stderr, "process handler pid: %d\n", (int)getpid());
-    output = (u_char *)olcf->ph_worker->process(olcf->ph_handler, (char *)input.data);
+    int is_binary = 0;
+    output = (u_char *)olcf->ph_worker->process(olcf->ph_handler, (char *)input.data, &output_len, &is_binary);
 
     if (output == NULL) {
         return NGX_DECLINED;
     }
 
-    output_len = ngx_strlen(output);
+    //output_len = ngx_strlen(output);
+    if(!is_binary)
+        output_len = ngx_strlen(output);
 
     output_str = ngx_pnalloc(r->pool, output_len + 1);
     if (output_str == NULL) {
+        if(olcf->ph_worker->free_output)
+            olcf->ph_worker->free_output((char*)output);
         return NGX_DECLINED;
     }
     ngx_memcpy(output_str, output, output_len);
@@ -299,8 +304,9 @@ ngx_http_post_handler_handler(ngx_http_request_t *r)
     b->last_buf = 1;
 
     // output header
-    r->headers_out.content_type.len = sizeof("text/plain") - 1;
-    r->headers_out.content_type.data = (u_char *) "text/plain";
+    char* content_type = is_binary ? "application/octet-stream" : "text/plain";
+    r->headers_out.content_type.len = ngx_strlen(content_type); // sizeof("text/plain") - 1;
+    r->headers_out.content_type.data = (u_char *)content_type; // "text/plain";
     r->headers_out.status = NGX_HTTP_OK;
     //r->headers_out.content_length_n = olcf->post_handler_module_name.len;
     r->headers_out.content_length_n = output_len;
